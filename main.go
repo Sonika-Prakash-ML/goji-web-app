@@ -8,6 +8,8 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"io"
 
@@ -29,6 +31,9 @@ import (
 	"go.elastic.co/apm/module/apmhttp/v2"
 	"go.elastic.co/apm/v2"
 
+	"go.elastic.co/apm/module/apmsql/v2"
+	_ "go.elastic.co/apm/module/apmsql/v2/sqlite3"
+
 	// apmgin "go.elastic.co/apm/module/apmgin/v2"
 	"apmgoji"
 )
@@ -40,6 +45,8 @@ var Error *log.Logger
 var Warn *log.Logger
 
 var client *http.Client
+
+var db *sql.DB
 
 func init() {
 	filePath, _ := filepath.Abs("C:\\Users\\Sonika.Prakash\\GitHub\\goji web app\\web.log")
@@ -53,6 +60,15 @@ func init() {
 // Note: the code below cuts a lot of corners to make the example app simple.
 
 func main() {
+	var err error
+	db, err = apmsql.Open("sqlite3", ":memory:")
+	if err != nil {
+		Error.Println(err)
+	}
+	if _, err := db.Exec("CREATE TABLE stats (name TEXT PRIMARY KEY, count INTEGER);"); err != nil {
+		Error.Println(err)
+	}
+
 	client = apmhttp.WrapClient(http.DefaultClient)
 	// web.Mux
 	// engine := web.New()
@@ -69,6 +85,9 @@ func main() {
 	// goji.Get("/hello", func(c web.C, w http.ResponseWriter, r *http.Request) {
 	// 	fmt.Fprintf(w, "Why hello there!")
 	// })
+
+	goji.Get("/hello/:name", HelloHandler)
+
 	// Fully backwards compatible with net/http's Handlers
 	goji.Get("/greets", http.RedirectHandler("/", 301))
 	// Use your favorite HTTP verbs
@@ -197,6 +216,37 @@ func GetZipCodeInfo(w http.ResponseWriter, r *http.Request) {
 	bodyNew, _ := ioutil.ReadAll(respNew.Body)
 	sb := string(bodyNew)
 	io.WriteString(w, sb)
+}
+
+func HelloHandler(c web.C, w http.ResponseWriter, r *http.Request) {
+	userName := c.URLParams["name"]
+	requestCount, _ := updateRequestCount(r.Context(), userName)
+	fmt.Fprintf(w, "Hello, %s! (#%d)\n", userName, requestCount)
+}
+
+// updateRequestCount increments a count for name in db, returning the new count.
+func updateRequestCount(ctx context.Context, name string) (int, error) {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return -1, err
+	}
+	row := tx.QueryRowContext(ctx, "SELECT count FROM stats WHERE name=?", name)
+	var count int
+	switch err := row.Scan(&count); err {
+	case nil:
+		count++
+		if _, err := tx.ExecContext(ctx, "UPDATE stats SET count=? WHERE name=?", count, name); err != nil {
+			return -1, err
+		}
+	case sql.ErrNoRows:
+		count = 1
+		if _, err := tx.ExecContext(ctx, "INSERT INTO stats (name, count) VALUES (?, ?)", name, count); err != nil {
+			return -1, err
+		}
+	default:
+		return -1, err
+	}
+	return count, tx.Commit()
 }
 
 // Root route (GET "/"). Print a list of greets.
