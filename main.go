@@ -132,6 +132,7 @@ func main() {
 	goji.Get("/waitforit", WaitForIt)
 
 	goji.Get("/zip", GetZip)
+	goji.Get("/test", TestHandler)
 
 	// external API calls
 	goji.Get("/randomuser", GetRandomUser)
@@ -247,6 +248,17 @@ func updateRequestCount(ctx context.Context, name string) (int, error) {
 		return -1, err
 	}
 	return count, tx.Commit()
+}
+
+func TestHandler(w http.ResponseWriter, r *http.Request) {
+	// this will be traced but seperately, not as a span
+	// to get it traced as a span, use apm's startspan method
+	// it will then be traced as a related transaction
+	resp, _ := http.Get("http://127.0.0.1:8000/zip")
+	body, _ := ioutil.ReadAll(resp.Body)
+	sb := string(body)
+	// Info.Println("API response: ", sb)
+	io.WriteString(w, sb)
 }
 
 // Root route (GET "/"). Print a list of greets.
