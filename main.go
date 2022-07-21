@@ -34,6 +34,9 @@ import (
 	"go.elastic.co/apm/module/apmsql/v2"
 	_ "go.elastic.co/apm/module/apmsql/v2/sqlite3"
 
+	"github.com/olivere/elastic"
+	"go.elastic.co/apm/module/apmelasticsearch/v2"
+
 	// apmgin "go.elastic.co/apm/module/apmgin/v2"
 	"apmgoji"
 )
@@ -47,6 +50,10 @@ var Warn *log.Logger
 var client *http.Client
 
 var db *sql.DB
+
+var elasticClient, _ = elastic.NewClient(elastic.SetHttpClient(&http.Client{
+	Transport: apmelasticsearch.WrapRoundTripper(http.DefaultTransport),
+}), elastic.SetBasicAuth("elastic", "pass123"))
 
 func init() {
 	filePath, _ := filepath.Abs("C:\\Users\\Sonika.Prakash\\GitHub\\goji web app\\web.log")
@@ -138,6 +145,7 @@ func main() {
 	goji.Get("/randomuser", GetRandomUser)
 	goji.Get("/getregion", GetRegion)
 	goji.Get("/getzipcode", GetZipCodeInfo)
+	goji.Get("/elastic", ElasticHandler)
 
 	// Call Serve() at the bottom of your main() function, and it'll take
 	// care of everything else for you, including binding to a socket (with
@@ -162,6 +170,20 @@ func main() {
 // 	Info.Println("test after")
 // 	goji.Serve()
 // }
+
+func ElasticHandler(w http.ResponseWriter, r *http.Request) {
+	// result, err := elasticClient.Search("index").Query(elastic.NewMatchAllQuery()).Do(r.Context())
+	exists, err := elasticClient.IndexExists("index-01").Do(r.Context())
+	if err != nil {
+		Error.Println("elastic search error: ", err)
+	}
+	if exists {
+		io.WriteString(w, "index index-01 exists")
+	} else {
+		io.WriteString(w, "index index-01 does not exists")
+	}
+	Info.Println("index exists: ", exists)
+}
 
 // GetRandomUser makes an outgoing http request
 func GetRandomUser(c web.C, w http.ResponseWriter, r *http.Request) {
