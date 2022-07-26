@@ -8,6 +8,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"fmt"
@@ -17,7 +18,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
+
+	// "path/filepath"
 
 	"regexp"
 	"strconv"
@@ -34,11 +36,24 @@ import (
 	"go.elastic.co/apm/module/apmsql/v2"
 	_ "go.elastic.co/apm/module/apmsql/v2/sqlite3"
 
-	"github.com/olivere/elastic"
-	"go.elastic.co/apm/module/apmelasticsearch/v2"
+	// "github.com/olivere/elastic"
+	// "go.elastic.co/apm/module/apmelasticsearch/v2"
 
 	// apmgin "go.elastic.co/apm/module/apmgin/v2"
 	"apmgoji"
+)
+
+// required time format for sfagent to pick up
+const timeFormat = "02/Jan/2006 15:04:05"
+const logFilePath = "C:\\Users\\Sonika.Prakash\\GitHub\\goji web app\\web.log"
+
+// const logFormat = "[%s] | elasticapm %+v"
+const logFormat = "[%s] | elasticapm transaction.id=%s trace.id=%s span.id=%s"
+
+var (
+	infoFormat  = fmt.Sprintf("[%s] [info] ", time.Now().Format(timeFormat))
+	debugFormat = fmt.Sprintf("[%s] [debug] ", time.Now().Format(timeFormat))
+	errorFormat = fmt.Sprintf("[%s] [error] ", time.Now().Format(timeFormat))
 )
 
 // logging levels
@@ -51,17 +66,46 @@ var client *http.Client
 
 var db *sql.DB
 
-var elasticClient, _ = elastic.NewClient(elastic.SetHttpClient(&http.Client{
-	Transport: apmelasticsearch.WrapRoundTripper(http.DefaultTransport),
-}), elastic.SetBasicAuth("elastic", "pass123"))
+type fileLogWriter struct {
+	bw     *bufio.Writer
+	f      *os.File
+	format string
+}
+
+func NewFileLogWriter(fname, format string) *fileLogWriter {
+	file, _ := os.OpenFile(fname, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	return &fileLogWriter{bw: bufio.NewWriter(file), f: file, format: format}
+}
+
+func (flw *fileLogWriter) Write(bs []byte) (int, error) {
+	// return fmt.Print(time.Now().Format(timeFormat), " | ", string(bs))
+	// return fmt.Printf("[%s] [info] [%s] | elasticapm ", time.Now().Format(timeFormat), string(bs))
+	defer flw.bw.Flush()
+	return flw.bw.WriteString(flw.format + string(bs))
+}
+
+// var elasticClient, _ = elastic.NewClient(elastic.SetHttpClient(&http.Client{
+// 	Transport: apmelasticsearch.WrapRoundTripper(http.DefaultTransport),
+// }), elastic.SetBasicAuth("elastic", "pass123"))
+
+// func init() {
+// 	filePath, _ := filepath.Abs("C:\\Users\\Sonika.Prakash\\GitHub\\goji web app\\web.log")
+// 	openLogFile, _ := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+// 	Info = log.New(openLogFile, "\tINFO\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
+// 	Debug = log.New(openLogFile, "\tDEBUG\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
+// 	Error = log.New(openLogFile, "\tERROR\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
+// 	Warn = log.New(openLogFile, "\tWARN\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
+// }
 
 func init() {
-	filePath, _ := filepath.Abs("C:\\Users\\Sonika.Prakash\\GitHub\\goji web app\\web.log")
-	openLogFile, _ := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	Info = log.New(openLogFile, "\tINFO\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
-	Debug = log.New(openLogFile, "\tDEBUG\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
-	Error = log.New(openLogFile, "\tERROR\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
-	Warn = log.New(openLogFile, "\tWARN\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
+	// filePath, _ := filepath.Abs("C:\\Users\\Sonika.Prakash\\GitHub\\goji web app\\web.log")
+	// openLogFile, _ := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	Info = log.New(NewFileLogWriter(logFilePath, infoFormat), "", 0) // Omit default prefixes.
+	// Info.SetOutput(new(infoLogWriter))   // Use our custom writer.
+	Debug = log.New(NewFileLogWriter(logFilePath, debugFormat), "", 0) // Omit default prefixes.
+	// Debug.SetOutput(new(debugLogWriter)) // Use our custom writer.
+	Error = log.New(NewFileLogWriter(logFilePath, errorFormat), "", 0) // Omit default prefixes.
+	// Error.SetOutput(new(errorLogWriter)) // Use our custom writer.
 }
 
 // Note: the code below cuts a lot of corners to make the example app simple.
@@ -83,7 +127,7 @@ func main() {
 	// web.New().Trace("/*", "www.google.com")
 	// engine.Use(apmgin.Middleware(engine))
 	//current time
-	fmt.Println(time.Now())
+	// fmt.Println(time.Now())
 	// goji.Trace("/*", "www.google.com")
 	// Add routes to the global handler
 	goji.Use(goji.DefaultMux.Router)
@@ -145,7 +189,7 @@ func main() {
 	goji.Get("/randomuser", GetRandomUser)
 	goji.Get("/getregion", GetRegion)
 	goji.Get("/getzipcode", GetZipCodeInfo)
-	goji.Get("/elastic", ElasticHandler)
+	// goji.Get("/elastic", ElasticHandler)
 
 	// Call Serve() at the bottom of your main() function, and it'll take
 	// care of everything else for you, including binding to a socket (with
@@ -154,6 +198,31 @@ func main() {
 	// production.
 	goji.Serve()
 }
+
+func getTraceLabels(ctx context.Context) map[string]string {
+	labels := make(map[string]string)
+	tx := apm.TransactionFromContext(ctx)
+	if tx != nil {
+		traceContext := tx.TraceContext()
+		labels["trace.id"] = traceContext.Trace.String()
+		labels["transaction.id"] = traceContext.Span.String()
+		if span := apm.SpanFromContext(ctx); span != nil {
+			labels["span.id"] = span.TraceContext().Span.String()
+		} else {
+			labels["span.id"] = "nil"
+		}
+	}
+	return labels
+}
+
+//time.Now().Format("02/Jan/2006 15:04:05")
+
+// func printLog(lmap map[string]string) {
+// 	strFormat := fmt.Sprintf("[%s] [info] [test message] | elasticapm transaction.id=%s trace.id=%s span.id=%s\n", time.Now().Format("02/Jan/2006 15:04:05"), lmap["transaction.id"], lmap["trace.id"], lmap["span.id"])
+// 	filePath, _ := filepath.Abs("C:\\Users\\Sonika.Prakash\\GitHub\\goji web app\\test.log")
+// 	f, _ := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+// 	f.WriteString(strFormat)
+// }
 
 // func main() {
 // 	// Using the Router middleware lets the tracer determine routes for
@@ -171,19 +240,19 @@ func main() {
 // 	goji.Serve()
 // }
 
-func ElasticHandler(w http.ResponseWriter, r *http.Request) {
-	// result, err := elasticClient.Search("index").Query(elastic.NewMatchAllQuery()).Do(r.Context())
-	exists, err := elasticClient.IndexExists("index-01").Do(r.Context())
-	if err != nil {
-		Error.Println("elastic search error: ", err)
-	}
-	if exists {
-		io.WriteString(w, "index index-01 exists")
-	} else {
-		io.WriteString(w, "index index-01 does not exists")
-	}
-	Info.Println("index exists: ", exists)
-}
+// func ElasticHandler(w http.ResponseWriter, r *http.Request) {
+// 	// result, err := elasticClient.Search("index").Query(elastic.NewMatchAllQuery()).Do(r.Context())
+// 	exists, err := elasticClient.IndexExists("index-01").Do(r.Context())
+// 	if err != nil {
+// 		Error.Println("elastic search error: ", err)
+// 	}
+// 	if exists {
+// 		io.WriteString(w, "index index-01 exists")
+// 	} else {
+// 		io.WriteString(w, "index index-01 does not exists")
+// 	}
+// 	Info.Println("index exists: ", exists)
+// }
 
 // GetRandomUser makes an outgoing http request
 func GetRandomUser(c web.C, w http.ResponseWriter, r *http.Request) {
@@ -227,6 +296,10 @@ func GetZip(w http.ResponseWriter, r *http.Request) {
 func GetZipCodeInfo(w http.ResponseWriter, r *http.Request) {
 	span, ctx := apm.StartSpan(r.Context(), "getZipCodeInfo", "custom")
 	defer span.End()
+	labels := getTraceLabels(ctx)
+	// Info.Println("labels:", labels)
+	Info.Println(fmt.Sprintf(logFormat, "inside GetZipCodeInfo handler function", labels["transaction.id"], labels["trace.id"], labels["span.id"]))
+	// printLog(labels)
 	req, _ := http.NewRequest("GET", "http://127.0.0.1:8000/zip", nil)
 	resp, _ := client.Do(req.WithContext(ctx))
 	defer resp.Body.Close()
@@ -285,6 +358,8 @@ func TestHandler(w http.ResponseWriter, r *http.Request) {
 
 // Root route (GET "/"). Print a list of greets.
 func Root(w http.ResponseWriter, r *http.Request) {
+	labels := getTraceLabels(r.Context())
+	Debug.Println(fmt.Sprintf(logFormat, "User has hit the url 127.0.0.1:8000/", labels["transaction.id"], labels["trace.id"], labels["span.id"]))
 	// In the real world you'd probably use a template or something.
 	io.WriteString(w, "Gritter\n======\n\n")
 	for i := len(Greets) - 1; i >= 0; i-- {
