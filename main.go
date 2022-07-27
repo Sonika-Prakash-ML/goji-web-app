@@ -45,17 +45,12 @@ import (
 )
 
 const (
-	logTimeFormat = "02/Jan/2006 15:04:05" // required time format for sfagent to pick up
-	logFilePath   = "C:\\Users\\Sonika.Prakash\\GitHub\\goji web app\\web.log"
-	logFormat     = "[%s] | elasticapm transaction.id=%s trace.id=%s span.id=%s\n"
-	// logFormat = "[%s] | elasticapm %+v"
-)
-
-// log formats for different log levels
-var (
-	infoPrefixFormat  = fmt.Sprintf("[%s] [info] ", time.Now().Format(logTimeFormat))
-	debugPrefixFormat = fmt.Sprintf("[%s] [debug] ", time.Now().Format(logTimeFormat))
-	errorPrefixFormat = fmt.Sprintf("[%s] [error] ", time.Now().Format(logTimeFormat))
+	logTimeFormat     = "02/Jan/2006 15:04:05" // required time format for sfagent to pick up
+	logFilePath       = "C:\\Users\\Sonika.Prakash\\GitHub\\goji web app\\web.log"
+	logFormat         = "[%s] | elasticapm transaction.id=%s trace.id=%s span.id=%s\n"
+	infoPrefixFormat  = "[%s] [info] "
+	debugPrefixFormat = "[%s] [debug] "
+	errorPrefixFormat = "[%s] [error] "
 )
 
 // logging levels
@@ -93,7 +88,7 @@ func NewLogWriter(fname, format string) *logWriter {
 func (flw *logWriter) Write(bs []byte) (int, error) {
 	defer flw.bw.Flush()
 	// return flw.bw.WriteString(flw.format + string(bs))
-	logStr := flw.format + logFormat
+	logStr := fmt.Sprintf(flw.format, time.Now().Format(logTimeFormat)) + logFormat
 	msg := strings.TrimRight(string(bs), "\r\n")
 	return flw.bw.WriteString(fmt.Sprintf(logStr, msg, ctxLabel.transactionID, ctxLabel.traceID, ctxLabel.spanID))
 }
@@ -287,7 +282,10 @@ func GetZipCodeInfo(w http.ResponseWriter, r *http.Request) {
 
 func HelloHandler(c web.C, w http.ResponseWriter, r *http.Request) {
 	userName := c.URLParams["name"]
+	getTraceLabels(r.Context())
+	Debug.Print("Name: ", userName)
 	requestCount, _ := updateRequestCount(r.Context(), userName)
+	Debug.Printf("Request count: %d", requestCount)
 	fmt.Fprintf(w, "Hello, %s! (#%d)\n", userName, requestCount)
 }
 
