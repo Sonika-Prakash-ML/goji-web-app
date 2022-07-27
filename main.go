@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"strings"
 
 	"io/ioutil"
 	"log"
@@ -43,45 +44,58 @@ import (
 	"apmgoji"
 )
 
-// required time format for sfagent to pick up
-const timeFormat = "02/Jan/2006 15:04:05"
-const logFilePath = "C:\\Users\\Sonika.Prakash\\GitHub\\goji web app\\web.log"
+const (
+	logTimeFormat = "02/Jan/2006 15:04:05" // required time format for sfagent to pick up
+	logFilePath   = "C:\\Users\\Sonika.Prakash\\GitHub\\goji web app\\web.log"
+	logFormat     = "[%s] | elasticapm transaction.id=%s trace.id=%s span.id=%s\n"
+	// logFormat = "[%s] | elasticapm %+v"
+)
 
-// const logFormat = "[%s] | elasticapm %+v"
-const logFormat = "[%s] | elasticapm transaction.id=%s trace.id=%s span.id=%s"
-
+// log formats for different log levels
 var (
-	infoFormat  = fmt.Sprintf("[%s] [info] ", time.Now().Format(timeFormat))
-	debugFormat = fmt.Sprintf("[%s] [debug] ", time.Now().Format(timeFormat))
-	errorFormat = fmt.Sprintf("[%s] [error] ", time.Now().Format(timeFormat))
+	infoPrefixFormat  = fmt.Sprintf("[%s] [info] ", time.Now().Format(logTimeFormat))
+	debugPrefixFormat = fmt.Sprintf("[%s] [debug] ", time.Now().Format(logTimeFormat))
+	errorPrefixFormat = fmt.Sprintf("[%s] [error] ", time.Now().Format(logTimeFormat))
 )
 
 // logging levels
-var Info *log.Logger
-var Debug *log.Logger
-var Error *log.Logger
-var Warn *log.Logger
+var (
+	Info  *log.Logger
+	Debug *log.Logger
+	Error *log.Logger
+	// Warn *log.Logger
+)
+
+type ctxLabels struct {
+	transactionID string
+	traceID       string
+	spanID        string
+}
+
+var ctxLabel ctxLabels
 
 var client *http.Client
 
 var db *sql.DB
 
-type fileLogWriter struct {
+type logWriter struct {
 	bw     *bufio.Writer
 	f      *os.File
 	format string
 }
 
-func NewFileLogWriter(fname, format string) *fileLogWriter {
+// NewLogWriter opens the log file and sets the logWriter struct
+func NewLogWriter(fname, format string) *logWriter {
 	file, _ := os.OpenFile(fname, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	return &fileLogWriter{bw: bufio.NewWriter(file), f: file, format: format}
+	return &logWriter{bw: bufio.NewWriter(file), f: file, format: format}
 }
 
-func (flw *fileLogWriter) Write(bs []byte) (int, error) {
-	// return fmt.Print(time.Now().Format(timeFormat), " | ", string(bs))
-	// return fmt.Printf("[%s] [info] [%s] | elasticapm ", time.Now().Format(timeFormat), string(bs))
+func (flw *logWriter) Write(bs []byte) (int, error) {
 	defer flw.bw.Flush()
-	return flw.bw.WriteString(flw.format + string(bs))
+	// return flw.bw.WriteString(flw.format + string(bs))
+	logStr := flw.format + logFormat
+	msg := strings.TrimRight(string(bs), "\r\n")
+	return flw.bw.WriteString(fmt.Sprintf(logStr, msg, ctxLabel.transactionID, ctxLabel.traceID, ctxLabel.spanID))
 }
 
 // var elasticClient, _ = elastic.NewClient(elastic.SetHttpClient(&http.Client{
@@ -98,14 +112,9 @@ func (flw *fileLogWriter) Write(bs []byte) (int, error) {
 // }
 
 func init() {
-	// filePath, _ := filepath.Abs("C:\\Users\\Sonika.Prakash\\GitHub\\goji web app\\web.log")
-	// openLogFile, _ := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	Info = log.New(NewFileLogWriter(logFilePath, infoFormat), "", 0) // Omit default prefixes.
-	// Info.SetOutput(new(infoLogWriter))   // Use our custom writer.
-	Debug = log.New(NewFileLogWriter(logFilePath, debugFormat), "", 0) // Omit default prefixes.
-	// Debug.SetOutput(new(debugLogWriter)) // Use our custom writer.
-	Error = log.New(NewFileLogWriter(logFilePath, errorFormat), "", 0) // Omit default prefixes.
-	// Error.SetOutput(new(errorLogWriter)) // Use our custom writer.
+	Info = log.New(NewLogWriter(logFilePath, infoPrefixFormat), "", 0)
+	Debug = log.New(NewLogWriter(logFilePath, debugPrefixFormat), "", 0)
+	Error = log.New(NewLogWriter(logFilePath, errorPrefixFormat), "", 0)
 }
 
 // Note: the code below cuts a lot of corners to make the example app simple.
@@ -121,15 +130,7 @@ func main() {
 	}
 
 	client = apmhttp.WrapClient(http.DefaultClient)
-	// web.Mux
-	// engine := web.New()
-	// var c *web.C
-	// web.New().Trace("/*", "www.google.com")
-	// engine.Use(apmgin.Middleware(engine))
-	//current time
-	// fmt.Println(time.Now())
-	// goji.Trace("/*", "www.google.com")
-	// Add routes to the global handler
+
 	goji.Use(goji.DefaultMux.Router)
 	goji.Use(apmgoji.Middleware())
 	goji.Get("/", Root)
@@ -199,46 +200,20 @@ func main() {
 	goji.Serve()
 }
 
-func getTraceLabels(ctx context.Context) map[string]string {
-	labels := make(map[string]string)
+// getTraceLabels gets the transaction, trace, and span IDs from the context passed
+func getTraceLabels(ctx context.Context) {
 	tx := apm.TransactionFromContext(ctx)
 	if tx != nil {
 		traceContext := tx.TraceContext()
-		labels["trace.id"] = traceContext.Trace.String()
-		labels["transaction.id"] = traceContext.Span.String()
+		ctxLabel.transactionID = traceContext.Span.String()
+		ctxLabel.traceID = traceContext.Trace.String()
 		if span := apm.SpanFromContext(ctx); span != nil {
-			labels["span.id"] = span.TraceContext().Span.String()
+			ctxLabel.spanID = span.TraceContext().Span.String()
 		} else {
-			labels["span.id"] = "nil"
+			ctxLabel.spanID = "None"
 		}
 	}
-	return labels
 }
-
-//time.Now().Format("02/Jan/2006 15:04:05")
-
-// func printLog(lmap map[string]string) {
-// 	strFormat := fmt.Sprintf("[%s] [info] [test message] | elasticapm transaction.id=%s trace.id=%s span.id=%s\n", time.Now().Format("02/Jan/2006 15:04:05"), lmap["transaction.id"], lmap["trace.id"], lmap["span.id"])
-// 	filePath, _ := filepath.Abs("C:\\Users\\Sonika.Prakash\\GitHub\\goji web app\\test.log")
-// 	f, _ := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-// 	f.WriteString(strFormat)
-// }
-
-// func main() {
-// 	// Using the Router middleware lets the tracer determine routes for
-// 	// use in a trace's resource name ("GET /user/:id")
-// 	// Otherwise the resource is only the method ("GET", "POST", etc.)
-// 	goji.Use(goji.DefaultMux.Router)
-// 	goji.Use(apmgoji.Middleware())
-// 	Info.Println("test outside")
-// 	goji.Get("/hello", func(c web.C, w http.ResponseWriter, r *http.Request) {
-// 		Info.Println("test inside")
-// 		// fmt.Fprintf(w, "Hello there!")
-// 		w.Write([]byte("Hello world"))
-// 	})
-// 	Info.Println("test after")
-// 	goji.Serve()
-// }
 
 // func ElasticHandler(w http.ResponseWriter, r *http.Request) {
 // 	// result, err := elasticClient.Search("index").Query(elastic.NewMatchAllQuery()).Do(r.Context())
@@ -292,14 +267,10 @@ func GetZip(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, "33162")
 }
 
-// this should give related transactions as theere is one internal http request and the other is a remote api
+// GetZipCodeInfo gives related transactions as there is one internal http request and the other is a remote api
 func GetZipCodeInfo(w http.ResponseWriter, r *http.Request) {
 	span, ctx := apm.StartSpan(r.Context(), "getZipCodeInfo", "custom")
 	defer span.End()
-	labels := getTraceLabels(ctx)
-	// Info.Println("labels:", labels)
-	Info.Println(fmt.Sprintf(logFormat, "inside GetZipCodeInfo handler function", labels["transaction.id"], labels["trace.id"], labels["span.id"]))
-	// printLog(labels)
 	req, _ := http.NewRequest("GET", "http://127.0.0.1:8000/zip", nil)
 	resp, _ := client.Do(req.WithContext(ctx))
 	defer resp.Body.Close()
@@ -358,9 +329,12 @@ func TestHandler(w http.ResponseWriter, r *http.Request) {
 
 // Root route (GET "/"). Print a list of greets.
 func Root(w http.ResponseWriter, r *http.Request) {
-	labels := getTraceLabels(r.Context())
-	Debug.Println(fmt.Sprintf(logFormat, "User has hit the url 127.0.0.1:8000/", labels["transaction.id"], labels["trace.id"], labels["span.id"]))
+	// labels := getTraceLabels(r.Context())
+	getTraceLabels(r.Context())
+	// Debug.Println(fmt.Sprintf(logFormat, "User has hit the url 127.0.0.1:8000/", labels["transaction.id"], labels["trace.id"], labels["span.id"]))
+	Info.Println("User has hit the url 127.0.0.1:8000/")
 	// In the real world you'd probably use a template or something.
+	Debug.Println("no. of greets:", len(Greets))
 	io.WriteString(w, "Gritter\n======\n\n")
 	for i := len(Greets) - 1; i >= 0; i-- {
 		Greets[i].Write(w)
