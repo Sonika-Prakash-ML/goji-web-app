@@ -8,6 +8,15 @@ import (
 	"github.com/zenazn/goji/web"
 )
 
+// GetContext gets the current request context
+func GetContext(h http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		ctxLabel.curCtx = r.Context()
+		h.ServeHTTP(w, r)
+	}
+	return http.HandlerFunc(fn)
+}
+
 // PlainText sets the content-type of responses to text/plain.
 func PlainText(h http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {

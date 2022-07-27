@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"go.elastic.co/apm/v2"
@@ -20,6 +19,7 @@ const (
 	infoPrefixFormat  = "[%s] [info] "
 	debugPrefixFormat = "[%s] [debug] "
 	errorPrefixFormat = "[%s] [error] "
+	spanIDRequired    = true // set this to true if you want span ID in logs
 )
 
 // logging levels
@@ -35,7 +35,7 @@ type CtxLabels struct {
 	transactionID string
 	traceID       string
 	spanID        string
-	Mux           sync.Mutex
+	curCtx        context.Context
 }
 
 var ctxLabel CtxLabels
@@ -58,12 +58,14 @@ func (flw *LogWriter) Write(bs []byte) (int, error) {
 	// return flw.bw.WriteString(flw.format + string(bs))
 	logStr := fmt.Sprintf(flw.format, time.Now().UTC().Format(logTimeFormat)) + logFormat
 	msg := strings.TrimRight(string(bs), "\r\n")
+	if !spanIDRequired {
+		ctxLabel.getTraceLabels(ctxLabel.curCtx)
+	}
 	return flw.bw.WriteString(fmt.Sprintf(logStr, msg, ctxLabel.transactionID, ctxLabel.traceID, ctxLabel.spanID))
 }
 
 // getTraceLabels gets the transaction, trace, and span IDs from the context passed
 func (c *CtxLabels) getTraceLabels(ctx context.Context) {
-	c.Mux.Lock()
 	tx := apm.TransactionFromContext(ctx)
 	if tx != nil {
 		traceContext := tx.TraceContext()
@@ -75,7 +77,6 @@ func (c *CtxLabels) getTraceLabels(ctx context.Context) {
 			ctxLabel.spanID = "None"
 		}
 	}
-	c.Mux.Unlock()
 }
 
 func init() {

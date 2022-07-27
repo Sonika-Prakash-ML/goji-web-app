@@ -73,6 +73,7 @@ func main() {
 
 	goji.Use(goji.DefaultMux.Router)
 	goji.Use(apmgoji.Middleware())
+	goji.Use(GetContext)
 	goji.Get("/", Root)
 	// goji.Get("/hello", func(c web.C, w http.ResponseWriter, r *http.Request) {
 	// 	fmt.Fprintf(w, "Why hello there!")
@@ -198,17 +199,22 @@ func GetZip(w http.ResponseWriter, r *http.Request) {
 func GetZipCodeInfo(w http.ResponseWriter, r *http.Request) {
 	span, ctx := apm.StartSpan(r.Context(), "getZipCodeInfo", "custom")
 	defer span.End()
+	ctxLabel.getTraceLabels(ctx)
+	Info.Println("Hitting /zip to get the zip code")
 	req, _ := http.NewRequest("GET", "http://127.0.0.1:8000/zip", nil)
 	resp, _ := client.Do(req.WithContext(ctx))
 	defer resp.Body.Close()
 	body, _ := ioutil.ReadAll(resp.Body)
 	zipCode := string(body)
+	Info.Println("Zip code:", zipCode)
 	time.Sleep(100 * time.Millisecond)
+	Info.Println("Hitting https://api.zippopotam.us/us/ to get the zip code info")
 	reqNew, _ := http.NewRequest("GET", "https://api.zippopotam.us/us/"+zipCode, nil)
 	respNew, _ := client.Do(reqNew.WithContext(ctx))
 	defer respNew.Body.Close()
 	bodyNew, _ := ioutil.ReadAll(respNew.Body)
 	sb := string(bodyNew)
+	Info.Println("Length of response body:", len(sb))
 	io.WriteString(w, sb)
 }
 
