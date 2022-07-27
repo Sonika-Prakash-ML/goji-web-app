@@ -8,17 +8,13 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"database/sql"
 	"fmt"
 	"io"
-	"strings"
 
 	"io/ioutil"
-	"log"
 	"net/http"
-	"os"
 
 	// "path/filepath"
 
@@ -44,54 +40,9 @@ import (
 	"apmgoji"
 )
 
-const (
-	logTimeFormat     = "02/Jan/2006 15:04:05" // required time format for sfagent to pick up
-	logFilePath       = "C:\\Users\\Sonika.Prakash\\GitHub\\goji web app\\web.log"
-	logFormat         = "[%s] | elasticapm transaction.id=%s trace.id=%s span.id=%s\n"
-	infoPrefixFormat  = "[%s] [info] "
-	debugPrefixFormat = "[%s] [debug] "
-	errorPrefixFormat = "[%s] [error] "
-)
-
-// logging levels
-var (
-	Info  *log.Logger
-	Debug *log.Logger
-	Error *log.Logger
-	// Warn *log.Logger
-)
-
-type ctxLabels struct {
-	transactionID string
-	traceID       string
-	spanID        string
-}
-
-var ctxLabel ctxLabels
-
 var client *http.Client
 
 var db *sql.DB
-
-type logWriter struct {
-	bw     *bufio.Writer
-	f      *os.File
-	format string
-}
-
-// NewLogWriter opens the log file and sets the logWriter struct
-func NewLogWriter(fname, format string) *logWriter {
-	file, _ := os.OpenFile(fname, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	return &logWriter{bw: bufio.NewWriter(file), f: file, format: format}
-}
-
-func (flw *logWriter) Write(bs []byte) (int, error) {
-	defer flw.bw.Flush()
-	// return flw.bw.WriteString(flw.format + string(bs))
-	logStr := fmt.Sprintf(flw.format, time.Now().Format(logTimeFormat)) + logFormat
-	msg := strings.TrimRight(string(bs), "\r\n")
-	return flw.bw.WriteString(fmt.Sprintf(logStr, msg, ctxLabel.transactionID, ctxLabel.traceID, ctxLabel.spanID))
-}
 
 // var elasticClient, _ = elastic.NewClient(elastic.SetHttpClient(&http.Client{
 // 	Transport: apmelasticsearch.WrapRoundTripper(http.DefaultTransport),
@@ -105,12 +56,6 @@ func (flw *logWriter) Write(bs []byte) (int, error) {
 // 	Error = log.New(openLogFile, "\tERROR\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
 // 	Warn = log.New(openLogFile, "\tWARN\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
 // }
-
-func init() {
-	Info = log.New(NewLogWriter(logFilePath, infoPrefixFormat), "", 0)
-	Debug = log.New(NewLogWriter(logFilePath, debugPrefixFormat), "", 0)
-	Error = log.New(NewLogWriter(logFilePath, errorPrefixFormat), "", 0)
-}
 
 // Note: the code below cuts a lot of corners to make the example app simple.
 
@@ -193,21 +138,6 @@ func main() {
 	// shutdown on SIGINT. Serve() is appropriate for both development and
 	// production.
 	goji.Serve()
-}
-
-// getTraceLabels gets the transaction, trace, and span IDs from the context passed
-func getTraceLabels(ctx context.Context) {
-	tx := apm.TransactionFromContext(ctx)
-	if tx != nil {
-		traceContext := tx.TraceContext()
-		ctxLabel.transactionID = traceContext.Span.String()
-		ctxLabel.traceID = traceContext.Trace.String()
-		if span := apm.SpanFromContext(ctx); span != nil {
-			ctxLabel.spanID = span.TraceContext().Span.String()
-		} else {
-			ctxLabel.spanID = "None"
-		}
-	}
 }
 
 // func ElasticHandler(w http.ResponseWriter, r *http.Request) {
