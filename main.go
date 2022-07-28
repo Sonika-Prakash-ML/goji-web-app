@@ -63,10 +63,10 @@ func main() {
 	var err error
 	db, err = apmsql.Open("sqlite3", ":memory:")
 	if err != nil {
-		Error.Println(err)
+		// Error.Println(err)
 	}
 	if _, err := db.Exec("CREATE TABLE stats (name TEXT PRIMARY KEY, count INTEGER);"); err != nil {
-		Error.Println(err)
+		// Error.Println(err)
 	}
 
 	client = apmhttp.WrapClient(http.DefaultClient)
@@ -160,14 +160,17 @@ func GetRandomUser(c web.C, w http.ResponseWriter, r *http.Request) {
 	time.Sleep(100 * time.Millisecond)
 	span, ctx := apm.StartSpan(r.Context(), "getRandomUser", "custom")
 	defer span.End()
-	ctxLabel.getTraceLabels(ctx)
+	// ctxLabel.UpdateCtxLabels(ctx)
+	// ctxLabel.getTraceLabels(ctx)
 	req, _ := http.NewRequest("GET", "https://randomuser.me/api/", nil)
 	// client := apmhttp.WrapClient(http.DefaultClient)
 	resp, _ := client.Do(req.WithContext(ctx))
 	defer resp.Body.Close() // this is mandatory for a span to be completed and sent to server
 	body, _ := ioutil.ReadAll(resp.Body)
 	sb := string(body)
-	Debug.Println("Length of response body:", len(sb))
+	// logger.WithField("transaction.id", ctxLabel.contextMap["transaction.id"]).Debug(ctxLabel.contextMap)
+	logger.WithFields(ctxLabel.contextMap).Debug("Length of response body:", len(sb))
+	// Debug.Println("Length of response body:", len(sb))
 	io.WriteString(w, sb)
 	// resp, _ := http.Get("https://randomuser.me/api/")
 	// body, _ := ioutil.ReadAll(resp.Body)
@@ -180,12 +183,14 @@ func GetRegion(w http.ResponseWriter, r *http.Request) {
 	time.Sleep(100 * time.Millisecond)
 	span, ctx := apm.StartSpan(r.Context(), "getRegion", "custom")
 	defer span.End()
+	// ctxLabel.UpdateCtxLabels(ctx)
 	time.Sleep(150 * time.Millisecond)
 	req, _ := http.NewRequest("GET", "https://ipinfo.io/161.185.160.93/geo", nil)
 	resp, _ := client.Do(req.WithContext(ctx))
 	defer resp.Body.Close()
 	body, _ := ioutil.ReadAll(resp.Body)
 	sb := string(body)
+	logger.WithFields(ctxLabel.contextMap).Debug("Length if response body: ", len(sb))
 	io.WriteString(w, sb)
 }
 
@@ -199,37 +204,42 @@ func GetZip(w http.ResponseWriter, r *http.Request) {
 func GetZipCodeInfo(w http.ResponseWriter, r *http.Request) {
 	span, ctx := apm.StartSpan(r.Context(), "getZipCodeInfo", "custom")
 	defer span.End()
-	ctxLabel.getTraceLabels(ctx)
-	Info.Println("Hitting /zip to get the zip code")
+	// ctxLabel.UpdateCtxLabels(ctx)
+	// ctxLabel.getTraceLabels(ctx)
+	// Info.Println("Hitting /zip to get the zip code")
+	logger.WithFields(ctxLabel.contextMap).Info("Hitting /zip to get the zip code")
 	req, _ := http.NewRequest("GET", "http://127.0.0.1:8000/zip", nil)
 	resp, _ := client.Do(req.WithContext(ctx))
 	defer resp.Body.Close()
 	body, _ := ioutil.ReadAll(resp.Body)
 	zipCode := string(body)
-	Info.Println("Zip code:", zipCode)
+	// Info.Println("Zip code:", zipCode)
+	logger.WithFields(ctxLabel.contextMap).Info("Zip code:", zipCode)
 	time.Sleep(100 * time.Millisecond)
-	Info.Println("Hitting https://api.zippopotam.us/us/ to get the zip code info")
+	// Info.Println("Hitting https://api.zippopotam.us/us/ to get the zip code info")
+	logger.WithFields(ctxLabel.contextMap).Info("Hitting https://api.zippopotam.us/us/ to get the zip code info")
 	reqNew, _ := http.NewRequest("GET", "https://api.zippopotam.us/us/"+zipCode, nil)
 	respNew, _ := client.Do(reqNew.WithContext(ctx))
 	defer respNew.Body.Close()
 	bodyNew, _ := ioutil.ReadAll(respNew.Body)
 	sb := string(bodyNew)
-	Info.Println("Length of response body:", len(sb))
+	// Info.Println("Length of response body:", len(sb))
+	logger.WithFields(ctxLabel.contextMap).Info("Length of response body:", len(sb))
 	io.WriteString(w, sb)
 }
 
 func HelloHandler(c web.C, w http.ResponseWriter, r *http.Request) {
 	userName := c.URLParams["name"]
-	ctxLabel.getTraceLabels(r.Context())
-	Debug.Print("Name: ", userName)
+	// ctxLabel.getTraceLabels(r.Context())
+	// Debug.Print("Name: ", userName)
 	requestCount, _ := updateRequestCount(r.Context(), userName)
-	Debug.Printf("Request count: %d", requestCount)
+	// Debug.Printf("Request count: %d", requestCount)
 	fmt.Fprintf(w, "Hello, %s! (#%d)\n", userName, requestCount)
 }
 
 // updateRequestCount increments a count for name in db, returning the new count.
 func updateRequestCount(ctx context.Context, name string) (int, error) {
-	ctxLabel.getTraceLabels(ctx)
+	// ctxLabel.getTraceLabels(ctx)
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return -1, err
@@ -238,19 +248,22 @@ func updateRequestCount(ctx context.Context, name string) (int, error) {
 	var count int
 	switch err := row.Scan(&count); err {
 	case nil:
-		Debug.Println("Row with name", name, " already exists. So incrementing the count.")
+		// Debug.Println("Row with name", name, " already exists. So incrementing the count.")
+		logger.WithFields(ctxLabel.contextMap).Debug("Row with name ", name, " already exists. So incrementing the count.")
 		count++
 		if _, err := tx.ExecContext(ctx, "UPDATE stats SET count=? WHERE name=?", count, name); err != nil {
 			return -1, err
 		}
 	case sql.ErrNoRows:
-		Debug.Println("Row with name", name, " does not exit. So inserting a new row.")
+		// Debug.Println("Row with name", name, " does not exit. So inserting a new row.")
+		logger.WithFields(ctxLabel.contextMap).Debug("Row with name ", name, " does not exit. So inserting a new row.")
 		count = 1
 		if _, err := tx.ExecContext(ctx, "INSERT INTO stats (name, count) VALUES (?, ?)", name, count); err != nil {
 			return -1, err
 		}
 	default:
-		Error.Println("Error in fetching database data:", err)
+		// Error.Println("Error in fetching database data:", err)
+		logger.WithFields(ctxLabel.contextMap).Error("Error in fetching database data:", err)
 		return -1, err
 	}
 	return count, tx.Commit()
@@ -270,11 +283,13 @@ func TestHandler(w http.ResponseWriter, r *http.Request) {
 // Root route (GET "/"). Print a list of greets.
 func Root(w http.ResponseWriter, r *http.Request) {
 	// labels := getTraceLabels(r.Context())
-	ctxLabel.getTraceLabels(r.Context())
+	// ctxLabel.getTraceLabels(r.Context())
 	// Debug.Println(fmt.Sprintf(logFormat, "User has hit the url 127.0.0.1:8000/", labels["transaction.id"], labels["trace.id"], labels["span.id"]))
-	Info.Println("User has hit the url 127.0.0.1:8000/")
+	// Info.Println("User has hit the url 127.0.0.1:8000/")
+	logger.WithFields(ctxLabel.contextMap).Info("User has hit the url 127.0.0.1:8000/")
 	// In the real world you'd probably use a template or something.
-	Debug.Println("no. of greets:", len(Greets))
+	// Debug.Println("no. of greets:", len(Greets))
+	logger.WithFields(ctxLabel.contextMap).Debug("no. of greets:", len(Greets))
 	io.WriteString(w, "Gritter\n======\n\n")
 	for i := len(Greets) - 1; i >= 0; i-- {
 		Greets[i].Write(w)
