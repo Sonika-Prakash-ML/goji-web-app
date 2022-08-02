@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"os"
 
 	"io/ioutil"
 	"net/http"
@@ -30,6 +31,8 @@ import (
 	"go.elastic.co/apm/module/apmhttp/v2"
 	"go.elastic.co/apm/v2"
 
+	// "go.elastic.co/apm/v2/transport"
+
 	"go.elastic.co/apm/module/apmsql/v2"
 	_ "go.elastic.co/apm/module/apmsql/v2/sqlite3"
 
@@ -38,6 +41,7 @@ import (
 
 	// apmgin "go.elastic.co/apm/module/apmgin/v2"
 	"apmgoji"
+	"sfapmpkg"
 )
 
 var client *http.Client
@@ -57,9 +61,25 @@ var db *sql.DB
 // 	Warn = log.New(openLogFile, "\tWARN\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
 // }
 
+func init() {
+	// os.Setenv("ELASTIC_APM_SERVER_URL", "http://10.81.1.208:8201")
+	// os.Setenv("ELASTIC_APM_GLOBAL_LABELS", "_tag_projectName=goTraceNew,_tag_appName=gojiAppNew,_tag_profileId=nfaumuql")
+	// if _, err := transport.NewHTTPTransport(); err != nil {
+	// 	logger.Errorf("transport.InitDefault: %v", err)
+	// }
+	// sfapmpkg.InitDefault()
+	sfapmpkg.Init(SnappyFlowKey, ProjectName, AppName)
+	logger.Debug("init url:", os.Getenv("ELASTIC_APM_SERVER_URL"))
+	logger.Debug("init labels:", os.Getenv("ELASTIC_APM_GLOBAL_LABELS"))
+}
+
 // Note: the code below cuts a lot of corners to make the example app simple.
 
 func main() {
+	// sfapmpkg.InitDefault()
+	logger.Debug("main url:", os.Getenv("ELASTIC_APM_SERVER_URL"))
+	logger.Debug("main labels:", os.Getenv("ELASTIC_APM_GLOBAL_LABELS"))
+
 	var err error
 	db, err = apmsql.Open("sqlite3", ":memory:")
 	if err != nil {
@@ -282,6 +302,8 @@ func TestHandler(w http.ResponseWriter, r *http.Request) {
 
 // Root route (GET "/"). Print a list of greets.
 func Root(w http.ResponseWriter, r *http.Request) {
+	logger.Debug("check url env:", os.Getenv("ELASTIC_APM_SERVER_URL"))
+	logger.Debug("check tags env:", os.Getenv("ELASTIC_APM_GLOBAL_LABELS"))
 	// labels := getTraceLabels(r.Context())
 	// ctxLabel.getTraceLabels(r.Context())
 	// Debug.Println(fmt.Sprintf(logFormat, "User has hit the url 127.0.0.1:8000/", labels["transaction.id"], labels["trace.id"], labels["span.id"]))

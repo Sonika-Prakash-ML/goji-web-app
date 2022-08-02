@@ -12,6 +12,9 @@ require (
 	go.elastic.co/apm/module/apmlogrus/v2 v2.1.0
 	go.elastic.co/apm/module/apmsql/v2 v2.1.0
 	go.elastic.co/apm/v2 v2.1.0
+	sfapmpkg v1.0.0
 )
 
 replace apmgoji v1.0.0 => C:/Users/Sonika.Prakash/GitHub/elastic-apm-agent-go/module/apmgoji
+
+replace sfapmpkg v1.0.0 => C:/Users/Sonika.Prakash/GitHub/sfapmpkg
