@@ -8,11 +8,15 @@
 package main
 
 import (
+	_ "sfapmpkg"
+
 	"context"
 	"database/sql"
 	"fmt"
 	"io"
+	"log"
 	"os"
+	"path/filepath"
 
 	"io/ioutil"
 	"net/http"
@@ -26,8 +30,10 @@ import (
 	"github.com/goji/param"
 	"github.com/zenazn/goji"
 	"github.com/zenazn/goji/web"
-
 	"github.com/zenazn/goji/web/middleware"
+
+	"apmgoji"
+
 	"go.elastic.co/apm/module/apmhttp/v2"
 	"go.elastic.co/apm/v2"
 
@@ -35,50 +41,59 @@ import (
 
 	"go.elastic.co/apm/module/apmsql/v2"
 	_ "go.elastic.co/apm/module/apmsql/v2/sqlite3"
-
 	// "github.com/olivere/elastic"
 	// "go.elastic.co/apm/module/apmelasticsearch/v2"
-
 	// apmgin "go.elastic.co/apm/module/apmgin/v2"
-	"apmgoji"
-	"sfapmpkg"
 )
 
 var client *http.Client
 
 var db *sql.DB
 
+var Info *log.Logger
+var Debug *log.Logger
+var Error *log.Logger
+var Warn *log.Logger
+
 // var elasticClient, _ = elastic.NewClient(elastic.SetHttpClient(&http.Client{
 // 	Transport: apmelasticsearch.WrapRoundTripper(http.DefaultTransport),
 // }), elastic.SetBasicAuth("elastic", "pass123"))
 
-// func init() {
-// 	filePath, _ := filepath.Abs("C:\\Users\\Sonika.Prakash\\GitHub\\goji web app\\web.log")
-// 	openLogFile, _ := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-// 	Info = log.New(openLogFile, "\tINFO\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
-// 	Debug = log.New(openLogFile, "\tDEBUG\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
-// 	Error = log.New(openLogFile, "\tERROR\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
-// 	Warn = log.New(openLogFile, "\tWARN\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
-// }
-
 func init() {
-	// os.Setenv("ELASTIC_APM_SERVER_URL", "http://10.81.1.208:8201")
-	// os.Setenv("ELASTIC_APM_GLOBAL_LABELS", "_tag_projectName=goTraceNew,_tag_appName=gojiAppNew,_tag_profileId=nfaumuql")
-	// if _, err := transport.NewHTTPTransport(); err != nil {
-	// 	logger.Errorf("transport.InitDefault: %v", err)
-	// }
-	// sfapmpkg.InitDefault()
-	sfapmpkg.Init(SnappyFlowKey, ProjectName, AppName)
-	logger.Debug("init url:", os.Getenv("ELASTIC_APM_SERVER_URL"))
-	logger.Debug("init labels:", os.Getenv("ELASTIC_APM_GLOBAL_LABELS"))
+	fmt.Println("web app init()")
+	filePath, _ := filepath.Abs("C:\\Users\\Sonika.Prakash\\GitHub\\goji web app\\web.log")
+	openLogFile, _ := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	Info = log.New(openLogFile, "\tINFO\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
+	Debug = log.New(openLogFile, "\tDEBUG\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
+	Error = log.New(openLogFile, "\tERROR\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
+	Warn = log.New(openLogFile, "\tWARN\t", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lshortfile)
+	Debug.Println("goji web app init()")
 }
+
+// func init() {
+// os.Setenv("ELASTIC_APM_SERVER_URL", "http://10.81.1.208:8201")
+// os.Setenv("ELASTIC_APM_GLOBAL_LABELS", "_tag_projectName=goTraceNew,_tag_appName=gojiAppNew,_tag_profileId=nfaumuql")
+// if _, err := transport.NewHTTPTransport(); err != nil {
+// 	logger.Errorf("transport.InitDefault: %v", err)
+// }
+// sfapmpkg.InitDefault()
+// sfapmpkg.Init(SnappyFlowKey, ProjectName, AppName)
+// Debug.Println("init url:", os.Getenv("ELASTIC_APM_SERVER_URL"))
+// Debug.Println("init labels:", os.Getenv("ELASTIC_APM_GLOBAL_LABELS"))
+// }
 
 // Note: the code below cuts a lot of corners to make the example app simple.
 
 func main() {
+	// LogrusInit()
+	fmt.Println("web app main()")
+	Debug.Println("Inside goji web app main()")
 	// sfapmpkg.InitDefault()
-	logger.Debug("main url:", os.Getenv("ELASTIC_APM_SERVER_URL"))
-	logger.Debug("main labels:", os.Getenv("ELASTIC_APM_GLOBAL_LABELS"))
+	Debug.Println("main url:", os.Getenv("ELASTIC_APM_SERVER_URL"))
+	Debug.Println("main labels:", os.Getenv("ELASTIC_APM_GLOBAL_LABELS"))
+
+	goji.Use(goji.DefaultMux.Router)
+	goji.Use(apmgoji.Middleware())
 
 	var err error
 	db, err = apmsql.Open("sqlite3", ":memory:")
@@ -91,9 +106,7 @@ func main() {
 
 	client = apmhttp.WrapClient(http.DefaultClient)
 
-	goji.Use(goji.DefaultMux.Router)
-	goji.Use(apmgoji.Middleware())
-	goji.Use(GetContext)
+	// goji.Use(GetContext)
 	goji.Get("/", Root)
 	// goji.Get("/hello", func(c web.C, w http.ResponseWriter, r *http.Request) {
 	// 	fmt.Fprintf(w, "Why hello there!")
@@ -189,7 +202,7 @@ func GetRandomUser(c web.C, w http.ResponseWriter, r *http.Request) {
 	body, _ := ioutil.ReadAll(resp.Body)
 	sb := string(body)
 	// logger.WithField("transaction.id", ctxLabel.contextMap["transaction.id"]).Debug(ctxLabel.contextMap)
-	logger.WithFields(ctxLabel.contextMap).Debug("Length of response body:", len(sb))
+	// logger.WithFields(ctxLabel.contextMap).Debug("Length of response body:", len(sb))
 	// Debug.Println("Length of response body:", len(sb))
 	io.WriteString(w, sb)
 	// resp, _ := http.Get("https://randomuser.me/api/")
@@ -210,7 +223,7 @@ func GetRegion(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 	body, _ := ioutil.ReadAll(resp.Body)
 	sb := string(body)
-	logger.WithFields(ctxLabel.contextMap).Debug("Length if response body: ", len(sb))
+	// logger.WithFields(ctxLabel.contextMap).Debug("Length if response body: ", len(sb))
 	io.WriteString(w, sb)
 }
 
@@ -227,24 +240,24 @@ func GetZipCodeInfo(w http.ResponseWriter, r *http.Request) {
 	// ctxLabel.UpdateCtxLabels(ctx)
 	// ctxLabel.getTraceLabels(ctx)
 	// Info.Println("Hitting /zip to get the zip code")
-	logger.WithFields(ctxLabel.contextMap).Info("Hitting /zip to get the zip code")
+	// logger.WithFields(ctxLabel.contextMap).Info("Hitting /zip to get the zip code")
 	req, _ := http.NewRequest("GET", "http://127.0.0.1:8000/zip", nil)
 	resp, _ := client.Do(req.WithContext(ctx))
 	defer resp.Body.Close()
 	body, _ := ioutil.ReadAll(resp.Body)
 	zipCode := string(body)
 	// Info.Println("Zip code:", zipCode)
-	logger.WithFields(ctxLabel.contextMap).Info("Zip code:", zipCode)
+	// logger.WithFields(ctxLabel.contextMap).Info("Zip code:", zipCode)
 	time.Sleep(100 * time.Millisecond)
 	// Info.Println("Hitting https://api.zippopotam.us/us/ to get the zip code info")
-	logger.WithFields(ctxLabel.contextMap).Info("Hitting https://api.zippopotam.us/us/ to get the zip code info")
+	// logger.WithFields(ctxLabel.contextMap).Info("Hitting https://api.zippopotam.us/us/ to get the zip code info")
 	reqNew, _ := http.NewRequest("GET", "https://api.zippopotam.us/us/"+zipCode, nil)
 	respNew, _ := client.Do(reqNew.WithContext(ctx))
 	defer respNew.Body.Close()
 	bodyNew, _ := ioutil.ReadAll(respNew.Body)
 	sb := string(bodyNew)
 	// Info.Println("Length of response body:", len(sb))
-	logger.WithFields(ctxLabel.contextMap).Info("Length of response body:", len(sb))
+	// logger.WithFields(ctxLabel.contextMap).Info("Length of response body:", len(sb))
 	io.WriteString(w, sb)
 }
 
@@ -269,21 +282,21 @@ func updateRequestCount(ctx context.Context, name string) (int, error) {
 	switch err := row.Scan(&count); err {
 	case nil:
 		// Debug.Println("Row with name", name, " already exists. So incrementing the count.")
-		logger.WithFields(ctxLabel.contextMap).Debug("Row with name ", name, " already exists. So incrementing the count.")
+		// logger.WithFields(ctxLabel.contextMap).Debug("Row with name ", name, " already exists. So incrementing the count.")
 		count++
 		if _, err := tx.ExecContext(ctx, "UPDATE stats SET count=? WHERE name=?", count, name); err != nil {
 			return -1, err
 		}
 	case sql.ErrNoRows:
 		// Debug.Println("Row with name", name, " does not exit. So inserting a new row.")
-		logger.WithFields(ctxLabel.contextMap).Debug("Row with name ", name, " does not exit. So inserting a new row.")
+		// logger.WithFields(ctxLabel.contextMap).Debug("Row with name ", name, " does not exit. So inserting a new row.")
 		count = 1
 		if _, err := tx.ExecContext(ctx, "INSERT INTO stats (name, count) VALUES (?, ?)", name, count); err != nil {
 			return -1, err
 		}
 	default:
 		// Error.Println("Error in fetching database data:", err)
-		logger.WithFields(ctxLabel.contextMap).Error("Error in fetching database data:", err)
+		// logger.WithFields(ctxLabel.contextMap).Error("Error in fetching database data:", err)
 		return -1, err
 	}
 	return count, tx.Commit()
@@ -302,16 +315,16 @@ func TestHandler(w http.ResponseWriter, r *http.Request) {
 
 // Root route (GET "/"). Print a list of greets.
 func Root(w http.ResponseWriter, r *http.Request) {
-	logger.Debug("check url env:", os.Getenv("ELASTIC_APM_SERVER_URL"))
-	logger.Debug("check tags env:", os.Getenv("ELASTIC_APM_GLOBAL_LABELS"))
+	Debug.Println("check url env:", os.Getenv("ELASTIC_APM_SERVER_URL"))
+	Debug.Println("check tags env:", os.Getenv("ELASTIC_APM_GLOBAL_LABELS"))
 	// labels := getTraceLabels(r.Context())
 	// ctxLabel.getTraceLabels(r.Context())
 	// Debug.Println(fmt.Sprintf(logFormat, "User has hit the url 127.0.0.1:8000/", labels["transaction.id"], labels["trace.id"], labels["span.id"]))
 	// Info.Println("User has hit the url 127.0.0.1:8000/")
-	logger.WithFields(ctxLabel.contextMap).Info("User has hit the url 127.0.0.1:8000/")
+	// logger.WithFields(ctxLabel.contextMap).Info("User has hit the url 127.0.0.1:8000/")
 	// In the real world you'd probably use a template or something.
 	// Debug.Println("no. of greets:", len(Greets))
-	logger.WithFields(ctxLabel.contextMap).Debug("no. of greets:", len(Greets))
+	// logger.WithFields(ctxLabel.contextMap).Debug("no. of greets:", len(Greets))
 	io.WriteString(w, "Gritter\n======\n\n")
 	for i := len(Greets) - 1; i >= 0; i-- {
 		Greets[i].Write(w)
