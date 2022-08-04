@@ -8,14 +8,14 @@ import (
 	"github.com/zenazn/goji/web"
 )
 
-// // GetContext gets the current request context
-// func GetContext(h http.Handler) http.Handler {
-// 	fn := func(w http.ResponseWriter, r *http.Request) {
-// 		ctxLabel.curCtx = r.Context()
-// 		h.ServeHTTP(w, r)
-// 	}
-// 	return http.HandlerFunc(fn)
-// }
+// GetContext gets the current request context
+func GetContext(h http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		ctxLabel.curCtx = r.Context()
+		h.ServeHTTP(w, r)
+	}
+	return http.HandlerFunc(fn)
+}
 
 // // GetContext gets the current request context
 // func GetContext(h http.Handler) http.Handler {

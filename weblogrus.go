@@ -60,7 +60,7 @@ package main
 // 	}
 // }
 
-// func LogrusInit() {
+// func init() {
 // 	fmt.Println("logrus custom init()")
 // 	logger.Out = NewLogWriter(logFilePath)
 // 	logger.Level = logrus.DebugLevel
