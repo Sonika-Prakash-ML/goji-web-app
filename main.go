@@ -8,7 +8,7 @@
 package main
 
 import (
-	_ "sfapmpkg"
+	_ "github.com/Sonika-dot-Prakash/sf-go-apm-lib"
 
 	"context"
 	"database/sql"
@@ -33,7 +33,7 @@ import (
 	"github.com/zenazn/goji/web"
 	"github.com/zenazn/goji/web/middleware"
 
-	"apmgoji"
+	"github.com/Sonika-dot-Prakash/go_apm/module/apmgoji"
 
 	"go.elastic.co/apm/module/apmhttp/v2"
 	"go.elastic.co/apm/v2"
